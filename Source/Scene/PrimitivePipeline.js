@@ -14,6 +14,7 @@ define([
         '../Core/IndexDatatype',
         '../Core/Matrix4',
         '../Core/OffsetGeometryInstanceAttribute',
+        '../Core/Proj4Projection',
         '../Core/WebMercatorProjection'
     ], function(
         BoundingSphere,
@@ -31,6 +32,7 @@ define([
         IndexDatatype,
         Matrix4,
         OffsetGeometryInstanceAttribute,
+        Proj4Projection,
         WebMercatorProjection) {
     'use strict';
 
@@ -621,6 +623,7 @@ define([
             packedInstances : packInstancesForCombine(parameters.instances, transferableObjects),
             ellipsoid : parameters.ellipsoid,
             isGeographic : parameters.projection instanceof GeographicProjection,
+            wellKnownText : parameters.projection instanceof Proj4Projection ? parameters.projection.wellKnownText : '',
             elementIndexUintSupported : parameters.elementIndexUintSupported,
             scene3DOnly : parameters.scene3DOnly,
             vertexCacheOptimize : parameters.vertexCacheOptimize,
@@ -651,7 +654,12 @@ define([
         }
 
         var ellipsoid = Ellipsoid.clone(packedParameters.ellipsoid);
-        var projection = packedParameters.isGeographic ? new GeographicProjection(ellipsoid) : new WebMercatorProjection(ellipsoid);
+        var projection;
+        if (packedParameters.wellKnownText === '') {
+            projection = packedParameters.isGeographic ? new GeographicProjection(ellipsoid) : new WebMercatorProjection(ellipsoid);
+        } else {
+            projection = new Proj4Projection(packedParameters.wellKnownText);
+        }
 
         return {
             instances : instances,

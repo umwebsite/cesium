@@ -5,6 +5,7 @@ define([
         './Math',
         './defaultValue',
         './defined',
+        './defineProperties',
         './Ellipsoid'
     ], function(
         proj4,
@@ -13,6 +14,7 @@ define([
         CesiumMath,
         defaultValue,
         defined,
+        defineProperties,
         Ellipsoid) {
     'use strict';
 
@@ -37,6 +39,20 @@ define([
         this._forwardFailed = false;
         this._inverseFailed = false;
     }
+
+    defineProperties(Proj4Projection.prototype, {
+        /**
+         * The well-known-text string used to initialize proj4js.
+         * @memberof Proj4Projection.prototype
+         * @type {String}
+         * @readonly
+         */
+        wellKnownText: {
+            get: function() {
+                return this._wkt;
+            }
+        }
+    });
 
     var projectionArray = [0, 0];
     /**
@@ -76,7 +92,7 @@ define([
         result.z = cartographic.height;
 
         return result;
-    }
+    };
 
     /**
      * Unprojects a set of projected {@link Cartesian3} coordinates, in meters, to {@link Cartographic}
@@ -113,7 +129,7 @@ define([
         result.height = cartesian.z;
 
         return result;
-    }
+    };
 
     return Proj4Projection;
 });

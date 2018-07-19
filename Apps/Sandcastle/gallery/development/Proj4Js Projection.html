@@ -34,15 +34,16 @@ var viewer = new Cesium.Viewer('cesiumContainer', {
     mapProjection : new Cesium.Proj4Projection('+proj=moll +lon_0=0 +x_0=0 +y_0=0 +a=6371000 +b=6371000 +units=m +no_defs')
 });
 
+var pointEntities = [];
 function addPoint(longitude, latitude) {
-    viewer.entities.add({
+    pointEntities.push(viewer.entities.add({
         position : Cesium.Cartesian3.fromDegrees(longitude, latitude),
         point : {
             pixelSize : 10,
             color : Cesium.Color.PURPLE
         },
         id : 'long: ' + longitude + ' lat: ' + latitude
-    });
+    }));
 }
 
 // Add lat/long points
@@ -52,11 +53,32 @@ for (var x = -175; x < 180; x += 10) {
     }
 }
 
+// Add a rectangle to show continents
+var rectangleEntity = viewer.entities.add({
+    rectangle : {
+        coordinates : Cesium.Rectangle.fromDegrees(-179.9999, -89.9999, 179.9999, 89.9999),
+        material : '../images/earthspec1k.jpg',
+        height : 0.0
+    }
+});
+
 viewer.scene.globe.show = false;
 
 Sandcastle.addToolbarButton('Show/Hide Globe', function() {
     viewer.scene.globe.show = !viewer.scene.globe.show;
-});//Sandcastle_End
+});
+
+Sandcastle.addToolbarButton('Show/Hide Continents', function() {
+    rectangleEntity.show = !rectangleEntity.show;
+});
+
+Sandcastle.addToolbarButton('Show/Hide Points', function() {
+    for (var i = 0; i < pointEntities.length; i++) {
+        pointEntities[i].show = !pointEntities[i].show;
+    }
+});
+
+//Sandcastle_End
     Sandcastle.finishedLoading();
 }
 if (typeof Cesium !== "undefined") {
