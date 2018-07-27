@@ -11,6 +11,7 @@ define([
         './Math',
         './Matrix3',
         './Matrix4',
+        './Proj4Projection',
         './Rectangle'
     ], function(
         Cartesian3,
@@ -25,6 +26,7 @@ define([
         CesiumMath,
         Matrix3,
         Matrix4,
+        Proj4Projection,
         Rectangle) {
     'use strict';
 
@@ -235,6 +237,28 @@ define([
         return BoundingSphere.fromRectangleWithHeights2D(rectangle, projection, 0.0, 0.0, result);
     };
 
+    // 8 points, one for each corner and the edge centers
+    var projectedPointsScratch = [
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3(),
+        new Cartesian3()
+    ];
+    var sampleScratch = new Cartographic();
+    var centerScratch = new Cartographic();
+
     /**
      * Computes a bounding sphere from a rectangle projected in 2D.  The bounding sphere accounts for the
      * object's minimum and maximum heights over the rectangle.
@@ -258,6 +282,80 @@ define([
         }
 
         projection = defaultValue(projection, defaultProjection);
+        var center;
+
+        if (projection instanceof Proj4Projection) {
+            center = Rectangle.center(rectangle, centerScratch);
+            var sample = sampleScratch;
+
+            sample = Rectangle.southwest(rectangle, sample);
+            sample.height = maximumHeight;
+            projection.project(sample, projectedPointsScratch[0]);
+
+            sample = Rectangle.southeast(rectangle, sample);
+            sample.height = maximumHeight;
+            projection.project(sample, projectedPointsScratch[1]);
+
+            sample = Rectangle.northeast(rectangle, sample);
+            sample.height = maximumHeight;
+            projection.project(sample, projectedPointsScratch[2]);
+
+            sample = Rectangle.northwest(rectangle, sample);
+            sample.height = maximumHeight;
+            projection.project(sample, projectedPointsScratch[3]);
+
+            sample.height = maximumHeight;
+            sample.latitude = center.latitude;
+            sample.longitude = rectangle.west;
+            projection.project(sample, projectedPointsScratch[4]);
+
+            sample.latitude = center.latitude;
+            sample.longitude = rectangle.east;
+            projection.project(sample, projectedPointsScratch[5]);
+
+            sample.latitude = rectangle.north;
+            sample.longitude = center.longitude;
+            projection.project(sample, projectedPointsScratch[6]);
+
+            sample.latitude = rectangle.south;
+            sample.longitude = center.longitude;
+            projection.project(sample, projectedPointsScratch[7]);
+
+            sample = Rectangle.southwest(rectangle, sample);
+            sample.height = minimumHeight;
+            projection.project(sample, projectedPointsScratch[8]);
+
+            sample = Rectangle.southeast(rectangle, sample);
+            sample.height = minimumHeight;
+            projection.project(sample, projectedPointsScratch[9]);
+
+            sample = Rectangle.northeast(rectangle, sample);
+            sample.height = minimumHeight;
+            projection.project(sample, projectedPointsScratch[10]);
+
+            sample = Rectangle.northwest(rectangle, sample);
+            sample.height = minimumHeight;
+            projection.project(sample, projectedPointsScratch[11]);
+
+            sample.height = minimumHeight;
+            sample.latitude = center.latitude;
+            sample.longitude = rectangle.west;
+            projection.project(sample, projectedPointsScratch[12]);
+
+            sample.latitude = center.latitude;
+            sample.longitude = rectangle.east;
+            projection.project(sample, projectedPointsScratch[13]);
+
+            sample.latitude = rectangle.north;
+            sample.longitude = center.longitude;
+            projection.project(sample, projectedPointsScratch[14]);
+
+            sample.latitude = rectangle.south;
+            sample.longitude = center.longitude;
+            projection.project(sample, projectedPointsScratch[15]);
+
+            return BoundingSphere.fromPoints(projectedPointsScratch, result);
+        }
 
         Rectangle.southwest(rectangle, fromRectangle2DSouthwest);
         fromRectangle2DSouthwest.height = minimumHeight;
@@ -272,7 +370,7 @@ define([
         var elevation = upperRight.z - lowerLeft.z;
 
         result.radius = Math.sqrt(width * width + height * height + elevation * elevation) * 0.5;
-        var center = result.center;
+        center = result.center;
         center.x = lowerLeft.x + width * 0.5;
         center.y = lowerLeft.y + height * 0.5;
         center.z = lowerLeft.z + elevation * 0.5;

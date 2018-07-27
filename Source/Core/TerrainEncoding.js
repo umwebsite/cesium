@@ -425,7 +425,7 @@ define([
                 offsetInBytes : 0,
                 strideInBytes : stride
             }, {
-                index : attributes.compressed1, // TODO: this might not be right
+                index : attributesAnd2D.position2D,
                 vertexBuffer : buffer,
                 componentDatatype : datatype,
                 componentsPerAttribute : num2DComponents,
