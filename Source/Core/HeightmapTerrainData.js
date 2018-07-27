@@ -7,6 +7,7 @@ define([
         './GeographicProjection',
         './HeightmapTessellator',
         './Math',
+        './Proj4Projection',
         './Rectangle',
         './TaskProcessor',
         './TerrainEncoding',
@@ -21,6 +22,7 @@ define([
         GeographicProjection,
         HeightmapTessellator,
         CesiumMath,
+        Proj4Projection,
         Rectangle,
         TaskProcessor,
         TerrainEncoding,
@@ -177,11 +179,12 @@ define([
      * @param {Number} y The Y coordinate of the tile for which to create the terrain data.
      * @param {Number} level The level of the tile for which to create the terrain data.
      * @param {Number} [exaggeration=1.0] The scale used to exaggerate the terrain.
+     * @param {MapProjection} [mapProjection] The scene's map projection.
      * @returns {Promise.<TerrainMesh>|undefined} A promise for the terrain mesh, or undefined if too many
      *          asynchronous mesh creations are already in progress and the operation should
      *          be retried later.
      */
-    HeightmapTerrainData.prototype.createMesh = function(tilingScheme, x, y, level, exaggeration) {
+    HeightmapTerrainData.prototype.createMesh = function(tilingScheme, x, y, level, exaggeration, mapProjection) {
         //>>includeStart('debug', pragmas.debug);
         if (!defined(tilingScheme)) {
             throw new DeveloperError('tilingScheme is required.');
@@ -205,6 +208,11 @@ define([
         // Compute the center of the tile for RTC rendering.
         var center = ellipsoid.cartographicToCartesian(Rectangle.center(rectangle));
 
+        var wkt;
+        if (defined(mapProjection) && mapProjection instanceof Proj4Projection) {
+            wkt = mapProjection.wellKnownText;
+        }
+
         var structure = this._structure;
 
         var levelZeroMaxError = TerrainProvider.getEstimatedLevelZeroGeometricErrorForAHeightmap(ellipsoid, this._width, tilingScheme.getNumberOfXTilesAtLevel(0));
@@ -223,7 +231,8 @@ define([
             ellipsoid : ellipsoid,
             skirtHeight : this._skirtHeight,
             isGeographic : tilingScheme.projection instanceof GeographicProjection,
-            exaggeration : exaggeration
+            exaggeration : exaggeration,
+            wkt : wkt
         });
 
         if (!defined(verticesPromise)) {

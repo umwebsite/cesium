@@ -3,6 +3,7 @@ define([
         './BoundingSphere',
         './Cartesian2',
         './Cartesian3',
+        './Cartographic',
         './defaultValue',
         './defined',
         './DeveloperError',
@@ -12,6 +13,7 @@ define([
         './Math',
         './Matrix4',
         './OrientedBoundingBox',
+        './Proj4Projection',
         './Rectangle',
         './TerrainEncoding',
         './Transforms',
@@ -21,6 +23,7 @@ define([
         BoundingSphere,
         Cartesian2,
         Cartesian3,
+        Cartographic,
         defaultValue,
         defined,
         DeveloperError,
@@ -30,6 +33,7 @@ define([
         CesiumMath,
         Matrix4,
         OrientedBoundingBox,
+        Proj4Projection,
         Rectangle,
         TerrainEncoding,
         Transforms,
@@ -64,6 +68,11 @@ define([
     var minimumScratch = new Cartesian3();
     var maximumScratch = new Cartesian3();
 
+    var cartographicScratch = new Cartographic();
+    var relativeToCenter2dScratch = new Cartesian2();
+    var projectedCartesian3Scratch = new Cartesian3();
+
+    // TODO: doc for includeWebMercatorT?
     /**
      * Fills an array of vertices from a heightmap image.
      *
@@ -114,6 +123,7 @@ define([
      *                  stride property is greater than 1.  If this property is false, the first element is the
      *                  low-order element.  If it is true, the first element is the high-order element.
      *
+     * @param {String} [options.wkt] Indicates that the terrain positions should be in a 2.5D projection, not on an ellipsoid
      * @example
      * var width = 5;
      * var height = 5;
@@ -153,6 +163,13 @@ define([
         // so it employs a lot of inlining and unrolling as an optimization.
         // In particular, the functionality of Ellipsoid.cartographicToCartesian
         // is inlined.
+
+        var proj4Projection;
+        var hasCustomProjection = false;
+        if (defined(options.wkt)) {
+            hasCustomProjection = true;
+            proj4Projection = new Proj4Projection(options.wkt);
+        }
 
         var cos = Math.cos;
         var sin = Math.sin;
@@ -204,6 +221,16 @@ define([
         relativeToCenter = hasRelativeToCenter ? relativeToCenter : Cartesian3.ZERO;
         var exaggeration = defaultValue(options.exaggeration, 1.0);
         var includeWebMercatorT = defaultValue(options.includeWebMercatorT, false);
+
+        var relativeToCenter2D;
+        if (hasCustomProjection) {
+            var cartographicRTC = ellipsoid.cartesianToCartographic(relativeToCenter, cartographicScratch);
+            cartographicRTC.height = 0.0;
+            var projectedRTC = proj4Projection.project(cartographicRTC, projectedCartesian3Scratch);
+            relativeToCenter2D = relativeToCenter2dScratch;
+            relativeToCenter2D.x = projectedRTC.x;
+            relativeToCenter2D.y = projectedRTC.y;
+        }
 
         var structure = defaultValue(options.structure, HeightmapTessellator.DEFAULT_STRUCTURE);
         var heightScale = defaultValue(structure.heightScale, HeightmapTessellator.DEFAULT_STRUCTURE.heightScale);
@@ -260,6 +287,11 @@ define([
         var positions = new Array(size);
         var heights = new Array(size);
         var uvs = new Array(size);
+        var positions2D;
+        if (hasCustomProjection) {
+            positions2D = new Array(size);
+        }
+
         var webMercatorTs = includeWebMercatorT ? new Array(size) : [];
 
         var startRow = 0;
@@ -391,6 +423,16 @@ define([
                 positions[index] = position;
                 heights[index] = heightSample;
 
+                if (hasCustomProjection) {
+                    var cartographic = cartographicScratch;
+                    cartographic.height = 0.0;
+                    cartographic.longitude = longitude;
+                    cartographic.latitude = latitude;
+                    var projectedPosition = proj4Projection.project(cartographic, projectedCartesian3Scratch);
+                    var position2D = new Cartesian2(projectedPosition.x, projectedPosition.y);
+                    positions2D[index] = position2D;
+                }
+
                 if (includeWebMercatorT) {
                     webMercatorTs[index] = webMercatorT;
                 }
@@ -420,12 +462,19 @@ define([
         }
 
         var aaBox = new AxisAlignedBoundingBox(minimum, maximum, relativeToCenter);
-        var encoding = new TerrainEncoding(aaBox, hMin, maximumHeight, fromENU, false, includeWebMercatorT);
+        var encoding = new TerrainEncoding(aaBox, hMin, maximumHeight, fromENU, false, includeWebMercatorT, relativeToCenter2D);
         var vertices = new Float32Array(size * encoding.getStride());
 
         var bufferIndex = 0;
-        for (var j = 0; j < size; ++j) {
-            bufferIndex = encoding.encode(vertices, bufferIndex, positions[j], uvs[j], heights[j], undefined, webMercatorTs[j]);
+        var j;
+        if (hasCustomProjection) {
+            for (j = 0; j < size; ++j) {
+                bufferIndex = encoding.encode(vertices, bufferIndex, positions[j], uvs[j], heights[j], undefined, webMercatorTs[j], positions2D[j]);
+            }
+        } else {
+            for (j = 0; j < size; ++j) {
+                bufferIndex = encoding.encode(vertices, bufferIndex, positions[j], uvs[j], heights[j], undefined, webMercatorTs[j]);
+            }
         }
 
         return {

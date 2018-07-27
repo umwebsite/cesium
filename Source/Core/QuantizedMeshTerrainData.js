@@ -11,6 +11,7 @@ define([
         './Intersections2D',
         './Math',
         './OrientedBoundingBox',
+        './Proj4Projection',
         './TaskProcessor',
         './TerrainEncoding',
         './TerrainMesh'
@@ -27,6 +28,7 @@ define([
         Intersections2D,
         CesiumMath,
         OrientedBoundingBox,
+        Proj4Projection,
         TaskProcessor,
         TerrainEncoding,
         TerrainMesh) {
@@ -254,11 +256,12 @@ define([
      * @param {Number} y The Y coordinate of the tile for which to create the terrain data.
      * @param {Number} level The level of the tile for which to create the terrain data.
      * @param {Number} [exaggeration=1.0] The scale used to exaggerate the terrain.
+     * @param {MapProjection} [mapProjection] The scene's map projection.
      * @returns {Promise.<TerrainMesh>|undefined} A promise for the terrain mesh, or undefined if too many
      *          asynchronous mesh creations are already in progress and the operation should
      *          be retried later.
      */
-    QuantizedMeshTerrainData.prototype.createMesh = function(tilingScheme, x, y, level, exaggeration) {
+    QuantizedMeshTerrainData.prototype.createMesh = function(tilingScheme, x, y, level, exaggeration, mapProjection) {
         //>>includeStart('debug', pragmas.debug);
         if (!defined(tilingScheme)) {
             throw new DeveloperError('tilingScheme is required.');
@@ -278,6 +281,11 @@ define([
         var rectangle = tilingScheme.tileXYToRectangle(x, y, level);
         exaggeration = defaultValue(exaggeration, 1.0);
 
+        var wkt;
+        if (defined(mapProjection) && mapProjection instanceof Proj4Projection) {
+            wkt = mapProjection.wellKnownText;
+        }
+
         var verticesPromise = createMeshTaskProcessor.scheduleTask({
             minimumHeight : this._minimumHeight,
             maximumHeight : this._maximumHeight,
@@ -296,7 +304,8 @@ define([
             rectangle : rectangle,
             relativeToCenter : this._boundingSphere.center,
             ellipsoid : ellipsoid,
-            exaggeration : exaggeration
+            exaggeration : exaggeration,
+            wkt : wkt
         });
 
         if (!defined(verticesPromise)) {
