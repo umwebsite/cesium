@@ -11,6 +11,7 @@ define([
         './Intersections2D',
         './Math',
         './OrientedBoundingBox',
+        './Proj4Projection',
         './QuantizedMeshTerrainData',
         './Rectangle',
         './TaskProcessor',
@@ -29,6 +30,7 @@ define([
         Intersections2D,
         CesiumMath,
         OrientedBoundingBox,
+        Proj4Projection,
         QuantizedMeshTerrainData,
         Rectangle,
         TaskProcessor,
@@ -152,7 +154,7 @@ define([
      *          asynchronous mesh creations are already in progress and the operation should
      *          be retried later.
      */
-    GoogleEarthEnterpriseTerrainData.prototype.createMesh = function(tilingScheme, x, y, level, exaggeration) {
+    GoogleEarthEnterpriseTerrainData.prototype.createMesh = function(tilingScheme, x, y, level, exaggeration, mapProjection) {
         //>>includeStart('debug', pragmas.debug);
         Check.typeOf.object('tilingScheme', tilingScheme);
         Check.typeOf.number('x', x);
@@ -168,6 +170,11 @@ define([
         // Compute the center of the tile for RTC rendering.
         var center = ellipsoid.cartographicToCartesian(Rectangle.center(rectangleScratch));
 
+        var wkt;
+        if (defined(mapProjection) && mapProjection instanceof Proj4Projection) {
+            wkt = mapProjection.wellKnownText;
+        }
+
         var levelZeroMaxError = 40075.16; // From Google's Doc
         var thisLevelMaxError = levelZeroMaxError / (1 << level);
         this._skirtHeight = Math.min(thisLevelMaxError * 8.0, 1000.0);
@@ -182,7 +189,8 @@ define([
             exaggeration : exaggeration,
             includeWebMercatorT : true,
             negativeAltitudeExponentBias: this._negativeAltitudeExponentBias,
-            negativeElevationThreshold: this._negativeElevationThreshold
+            negativeElevationThreshold: this._negativeElevationThreshold,
+            wkt : wkt
         });
 
         if (!defined(verticesPromise)) {

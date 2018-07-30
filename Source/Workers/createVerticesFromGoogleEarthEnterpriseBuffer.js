@@ -11,6 +11,7 @@ define([
         '../Core/Math',
         '../Core/Matrix4',
         '../Core/OrientedBoundingBox',
+        '../Core/Proj4Projection',
         '../Core/Rectangle',
         '../Core/RuntimeError',
         '../Core/TerrainEncoding',
@@ -30,6 +31,7 @@ define([
         CesiumMath,
         Matrix4,
         OrientedBoundingBox,
+        Proj4Projection,
         Rectangle,
         RuntimeError,
         TerrainEncoding,
@@ -62,7 +64,8 @@ define([
 
         var statistics = processBuffer(parameters.buffer, parameters.relativeToCenter, parameters.ellipsoid,
             parameters.rectangle, parameters.nativeRectangle, parameters.exaggeration, parameters.skirtHeight,
-            parameters.includeWebMercatorT, parameters.negativeAltitudeExponentBias, parameters.negativeElevationThreshold);
+            parameters.includeWebMercatorT, parameters.negativeAltitudeExponentBias, parameters.negativeElevationThreshold,
+            parameters.wkt);
         var vertices = statistics.vertices;
         transferableObjects.push(vertices.buffer);
         var indices = statistics.indices;
@@ -88,13 +91,21 @@ define([
     var minimumScratch = new Cartesian3();
     var maximumScratch = new Cartesian3();
     var matrix4Scratch = new Matrix4();
-
-    function processBuffer(buffer, relativeToCenter, ellipsoid, rectangle, nativeRectangle, exaggeration, skirtHeight, includeWebMercatorT, negativeAltitudeExponentBias, negativeElevationThreshold) {
+    var projectedCartesian3Scratch = new Cartesian3();
+    var relativeToCenter2dScratch = new Cartesian2();
+    function processBuffer(buffer, relativeToCenter, ellipsoid, rectangle, nativeRectangle, exaggeration, skirtHeight, includeWebMercatorT, negativeAltitudeExponentBias, negativeElevationThreshold, wellKnownText) {
         var geographicWest;
         var geographicSouth;
         var geographicEast;
         var geographicNorth;
         var rectangleWidth, rectangleHeight;
+
+        var hasCustomProjection = defined(wellKnownText);
+
+        var proj4Projection;
+        if (hasCustomProjection) {
+            proj4Projection = new Proj4Projection(wellKnownText);
+        }
 
         if (!defined(rectangle)) {
             geographicWest = CesiumMath.toRadians(nativeRectangle.west);
@@ -118,6 +129,16 @@ define([
 
         var fromENU = Transforms.eastNorthUpToFixedFrame(relativeToCenter, ellipsoid);
         var toENU = Matrix4.inverseTransformation(fromENU, matrix4Scratch);
+
+        var relativeToCenter2D;
+        if (hasCustomProjection) {
+            var cartographicRTC = ellipsoid.cartesianToCartographic(relativeToCenter, scratchCartographic);
+            cartographicRTC.height = 0.0;
+            var projectedRTC = proj4Projection.project(cartographicRTC, projectedCartesian3Scratch);
+            relativeToCenter2D = relativeToCenter2dScratch;
+            relativeToCenter2D.x = projectedRTC.x;
+            relativeToCenter2D.y = projectedRTC.y;
+        }
 
         var southMercatorY;
         var oneOverMercatorHeight;
@@ -182,6 +203,10 @@ define([
 
         // Create arrays
         var positions = new Array(size);
+        var positions2D;
+        if (hasCustomProjection) {
+            positions2D = new Array(size);
+        }
         var uvs = new Array(size);
         var heights = new Array(size);
         var webMercatorTs = includeWebMercatorT ? new Array(size) : [];
@@ -290,6 +315,11 @@ define([
                 var pos = ellipsoid.cartographicToCartesian(scratchCartographic);
                 positions[pointOffset] = pos;
 
+                if (hasCustomProjection) {
+                    var pos2D = proj4Projection.project(scratchCartographic, projectedCartesian3Scratch);
+                    positions2D[pointOffset] = new Cartesian2(pos2D.x, pos2D.y);
+                }
+
                 if (includeWebMercatorT) {
                     webMercatorTs[pointOffset] = (WebMercatorProjection.geodeticLatitudeToMercatorAngle(latitude) - southMercatorY) * oneOverMercatorHeight;
                 }
@@ -320,6 +350,9 @@ define([
         }
 
         positions.length = pointOffset;
+        if (hasCustomProjection) {
+            positions2D.length = pointOffset;
+        }
         uvs.length = pointOffset;
         heights.length = pointOffset;
         if (includeWebMercatorT) {
@@ -357,13 +390,13 @@ define([
 
         var percentage = 0.00001;
         addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-            westBorder, -percentage * rectangleWidth, true, -percentage * rectangleHeight);
+            westBorder, -percentage * rectangleWidth, true, -percentage * rectangleHeight, positions2D, proj4Projection);
         addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-            southBorder, -percentage * rectangleHeight, false);
+            southBorder, -percentage * rectangleHeight, false, 0.0, positions2D, proj4Projection);
         addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-            eastBorder, percentage * rectangleWidth, true, percentage * rectangleHeight);
+            eastBorder, percentage * rectangleWidth, true, percentage * rectangleHeight, positions2D, proj4Projection);
         addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-            northBorder, percentage * rectangleHeight, false);
+            northBorder, percentage * rectangleHeight, false, 0.0, positions2D, proj4Projection);
 
         // Since the corner between the north and west sides is in the west array, generate the last
         //  two triangles between the last north vertex and the first west vertex
@@ -390,12 +423,19 @@ define([
         var occludeePointInScaledSpace = occluder.computeHorizonCullingPoint(relativeToCenter, positions);
 
         var aaBox = new AxisAlignedBoundingBox(minimum, maximum, relativeToCenter);
-        var encoding = new TerrainEncoding(aaBox, skirtOptions.hMin, maxHeight, fromENU, false, includeWebMercatorT);
+        var encoding = new TerrainEncoding(aaBox, skirtOptions.hMin, maxHeight, fromENU, false, includeWebMercatorT, relativeToCenter2D);
         var vertices = new Float32Array(size * encoding.getStride());
 
         var bufferIndex = 0;
-        for (var k = 0; k < size; ++k) {
-            bufferIndex = encoding.encode(vertices, bufferIndex, positions[k], uvs[k], heights[k], undefined, webMercatorTs[k]);
+        var k;
+        if (hasCustomProjection) {
+            for (k = 0; k < size; ++k) {
+                bufferIndex = encoding.encode(vertices, bufferIndex, positions[k], uvs[k], heights[k], undefined, webMercatorTs[k], positions2D[k]);
+            }
+        } else {
+            for (k = 0; k < size; ++k) {
+                bufferIndex = encoding.encode(vertices, bufferIndex, positions[k], uvs[k], heights[k], undefined, webMercatorTs[k]);
+            }
         }
 
         return {
@@ -413,7 +453,9 @@ define([
     }
 
     function addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-                      borderPoints, fudgeFactor, eastOrWest, cornerFudge) {
+                      borderPoints, fudgeFactor, eastOrWest, cornerFudge, positions2D, proj4Projection) {
+        var hasCustomProjection = defined(proj4Projection);
+
         var count = borderPoints.length;
         for (var j = 0; j < count; ++j) {
             var borderPoint = borderPoints[j];
@@ -450,6 +492,11 @@ define([
             uvs.push(Cartesian2.clone(uvs[borderIndex])); // Copy UVs from border point
             if (webMercatorTs.length > 0) {
                 webMercatorTs.push(webMercatorTs[borderIndex]);
+            }
+
+            if (hasCustomProjection) {
+                var pos2D = proj4Projection.project(scratchCartographic, projectedCartesian3Scratch);
+                positions2D.push(new Cartesian2(pos2D.x, pos2D.y));
             }
 
             Matrix4.multiplyByPoint(skirtOptions.toENU, pos, scratchCartesian);
