@@ -34,6 +34,9 @@ var viewer = new Cesium.Viewer('cesiumContainer', {
     mapProjection : new Cesium.Proj4Projection('+proj=moll +lon_0=0 +x_0=0 +y_0=0 +a=6371000 +b=6371000 +units=m +no_defs')
 });
 
+//Add Cesium Inspector
+viewer.extend(Cesium.viewerCesiumInspectorMixin);
+
 var pointEntities = [];
 function addPoint(longitude, latitude) {
     pointEntities.push(viewer.entities.add({
@@ -58,11 +61,9 @@ var rectangleEntity = viewer.entities.add({
     rectangle : {
         coordinates : Cesium.Rectangle.fromDegrees(-179.9999, -89.9999, 179.9999, 89.9999),
         material : '../images/earthspec1k.jpg',
-        height : 0.0
+        height : 1000.0
     }
 });
-
-viewer.scene.globe.show = false;
 
 Sandcastle.addToolbarButton('Show/Hide Globe', function() {
     viewer.scene.globe.show = !viewer.scene.globe.show;

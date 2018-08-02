@@ -1,6 +1,8 @@
 define([
+        '../ThirdParty/when',
         '../Core/BoundingSphere',
         '../Core/ComponentDatatype',
+        '../Core/CustomProjection',
         '../Core/defaultValue',
         '../Core/defined',
         '../Core/DeveloperError',
@@ -17,8 +19,10 @@ define([
         '../Core/Proj4Projection',
         '../Core/WebMercatorProjection'
     ], function(
+        when,
         BoundingSphere,
         ComponentDatatype,
+        CustomProjection,
         defaultValue,
         defined,
         DeveloperError,
@@ -618,18 +622,22 @@ define([
             transferableObjects.push(createGeometryResults[i].packedData.buffer);
         }
 
+        var projection = parameters.projection;
+
         return {
             createGeometryResults : parameters.createGeometryResults,
             packedInstances : packInstancesForCombine(parameters.instances, transferableObjects),
             ellipsoid : parameters.ellipsoid,
-            isGeographic : parameters.projection instanceof GeographicProjection,
-            wellKnownText : parameters.projection instanceof Proj4Projection ? parameters.projection.wellKnownText : '',
+            isGeographic : projection instanceof GeographicProjection,
             elementIndexUintSupported : parameters.elementIndexUintSupported,
             scene3DOnly : parameters.scene3DOnly,
             vertexCacheOptimize : parameters.vertexCacheOptimize,
             compressVertices : parameters.compressVertices,
             modelMatrix : parameters.modelMatrix,
-            createPickOffsets : parameters.createPickOffsets
+            createPickOffsets : parameters.createPickOffsets,
+            wkt : projection.wellKnownText,
+            projectionUrl : projection._url,
+            projectionFunctionName : projection._functionName
         };
     };
 
@@ -655,23 +663,29 @@ define([
 
         var ellipsoid = Ellipsoid.clone(packedParameters.ellipsoid);
         var projection;
-        if (packedParameters.wellKnownText === '') {
-            projection = packedParameters.isGeographic ? new GeographicProjection(ellipsoid) : new WebMercatorProjection(ellipsoid);
+        var projectionPromise = when.resolve();
+        if (defined(packedParameters.wkt)) {
+            projection = new Proj4Projection(packedParameters.wkt);
+        } else if (defined(packedParameters.projectionUrl) && defined(packedParameters.projectionFunctionName)) {
+            projection = new CustomProjection(packedParameters.projectionUrl, packedParameters.projectionFunctionName);
+            projectionPromise = projection.readyPromise;
         } else {
-            projection = new Proj4Projection(packedParameters.wellKnownText);
+            projection = packedParameters.isGeographic ? new GeographicProjection(ellipsoid) : new WebMercatorProjection(ellipsoid);
         }
 
-        return {
-            instances : instances,
-            ellipsoid : ellipsoid,
-            projection : projection,
-            elementIndexUintSupported : packedParameters.elementIndexUintSupported,
-            scene3DOnly : packedParameters.scene3DOnly,
-            vertexCacheOptimize : packedParameters.vertexCacheOptimize,
-            compressVertices : packedParameters.compressVertices,
-            modelMatrix : Matrix4.clone(packedParameters.modelMatrix),
-            createPickOffsets : packedParameters.createPickOffsets
-        };
+        return projectionPromise.then(function() {
+            return {
+                instances : instances,
+                ellipsoid : ellipsoid,
+                projection : projection,
+                elementIndexUintSupported : packedParameters.elementIndexUintSupported,
+                scene3DOnly : packedParameters.scene3DOnly,
+                vertexCacheOptimize : packedParameters.vertexCacheOptimize,
+                compressVertices : packedParameters.compressVertices,
+                modelMatrix : Matrix4.clone(packedParameters.modelMatrix),
+                createPickOffsets : packedParameters.createPickOffsets
+            };
+        });
     };
 
     function packBoundingSpheres(boundingSpheres) {

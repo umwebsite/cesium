@@ -7,6 +7,7 @@ define([
         '../Core/Color',
         '../Core/ColorGeometryInstanceAttribute',
         '../Core/combine',
+        '../Core/CustomProjection',
         '../Core/defaultValue',
         '../Core/defined',
         '../Core/defineProperties',
@@ -54,6 +55,7 @@ define([
         Color,
         ColorGeometryInstanceAttribute,
         combine,
+        CustomProjection,
         defaultValue,
         defined,
         defineProperties,
@@ -1158,14 +1160,14 @@ define([
             if (frameState.mode !== SceneMode.MORPHING) {
                 // If using a custom projection, project the existing tile center instead.
                 rtc = rtcScratch;
-                if (frameState.mapProjection instanceof Proj4Projection) {
-                    rtc.x = 0.0;
-                    rtc.y = surfaceTile.center2D.x;
-                    rtc.z = surfaceTile.center2D.y;
-                } else {
+                if (frameState.mapProjection.isEquatorialCylindrical) {
                     rtc.x = 0.0;
                     rtc.y = (tileRectangle.z + tileRectangle.x) * 0.5;
                     rtc.z = (tileRectangle.w + tileRectangle.y) * 0.5;
+                } else {
+                    rtc.x = 0.0;
+                    rtc.y = surfaceTile.center2D.x;
+                    rtc.z = surfaceTile.center2D.y;
                 }
 
                 tileRectangle.x -= rtc.y;

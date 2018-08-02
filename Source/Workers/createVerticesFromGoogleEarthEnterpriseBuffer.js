@@ -1,9 +1,11 @@
 define([
+        '../ThirdParty/when',
         '../Core/AxisAlignedBoundingBox',
         '../Core/BoundingSphere',
         '../Core/Cartesian2',
         '../Core/Cartesian3',
         '../Core/Cartographic',
+        '../Core/CustomProjection',
         '../Core/defaultValue',
         '../Core/defined',
         '../Core/Ellipsoid',
@@ -19,11 +21,13 @@ define([
         '../Core/WebMercatorProjection',
         './createTaskProcessorWorker'
     ], function(
+        when,
         AxisAlignedBoundingBox,
         BoundingSphere,
         Cartesian2,
         Cartesian3,
         Cartographic,
+        CustomProjection,
         defaultValue,
         defined,
         Ellipsoid,
@@ -62,28 +66,40 @@ define([
         parameters.ellipsoid = Ellipsoid.clone(parameters.ellipsoid);
         parameters.rectangle = Rectangle.clone(parameters.rectangle);
 
-        var statistics = processBuffer(parameters.buffer, parameters.relativeToCenter, parameters.ellipsoid,
-            parameters.rectangle, parameters.nativeRectangle, parameters.exaggeration, parameters.skirtHeight,
-            parameters.includeWebMercatorT, parameters.negativeAltitudeExponentBias, parameters.negativeElevationThreshold,
-            parameters.wkt);
-        var vertices = statistics.vertices;
-        transferableObjects.push(vertices.buffer);
-        var indices = statistics.indices;
-        transferableObjects.push(indices.buffer);
+        var mapProjection;
+        var projectionPromise = when.resolve();
+        if (defined(parameters.wkt)) {
+            mapProjection = new Proj4Projection(parameters.wkt);
+        }
+        if (defined(parameters.projectionUrl) && defined(parameters.projectionFunctionName)) {
+            mapProjection = new CustomProjection(parameters.projectionUrl, parameters.projectionFunctionName);
+            projectionPromise = mapProjection.readyPromise;
+        }
 
-        return {
-            vertices : vertices.buffer,
-            indices : indices.buffer,
-            numberOfAttributes : statistics.encoding.getStride(),
-            minimumHeight : statistics.minimumHeight,
-            maximumHeight : statistics.maximumHeight,
-            boundingSphere3D : statistics.boundingSphere3D,
-            orientedBoundingBox : statistics.orientedBoundingBox,
-            occludeePointInScaledSpace : statistics.occludeePointInScaledSpace,
-            encoding : statistics.encoding,
-            vertexCountWithoutSkirts : statistics.vertexCountWithoutSkirts,
-            skirtIndex : statistics.skirtIndex
-        };
+        return projectionPromise.then(function() {
+            var statistics = processBuffer(parameters.buffer, parameters.relativeToCenter, parameters.ellipsoid,
+                parameters.rectangle, parameters.nativeRectangle, parameters.exaggeration, parameters.skirtHeight,
+                parameters.includeWebMercatorT, parameters.negativeAltitudeExponentBias, parameters.negativeElevationThreshold,
+                mapProjection);
+            var vertices = statistics.vertices;
+            transferableObjects.push(vertices.buffer);
+            var indices = statistics.indices;
+            transferableObjects.push(indices.buffer);
+
+            return {
+                vertices : vertices.buffer,
+                indices : indices.buffer,
+                numberOfAttributes : statistics.encoding.getStride(),
+                minimumHeight : statistics.minimumHeight,
+                maximumHeight : statistics.maximumHeight,
+                boundingSphere3D : statistics.boundingSphere3D,
+                orientedBoundingBox : statistics.orientedBoundingBox,
+                occludeePointInScaledSpace : statistics.occludeePointInScaledSpace,
+                encoding : statistics.encoding,
+                vertexCountWithoutSkirts : statistics.vertexCountWithoutSkirts,
+                skirtIndex : statistics.skirtIndex
+            };
+        });
     }
 
     var scratchCartographic = new Cartographic();
@@ -93,19 +109,14 @@ define([
     var matrix4Scratch = new Matrix4();
     var projectedCartesian3Scratch = new Cartesian3();
     var relativeToCenter2dScratch = new Cartesian2();
-    function processBuffer(buffer, relativeToCenter, ellipsoid, rectangle, nativeRectangle, exaggeration, skirtHeight, includeWebMercatorT, negativeAltitudeExponentBias, negativeElevationThreshold, wellKnownText) {
+    function processBuffer(buffer, relativeToCenter, ellipsoid, rectangle, nativeRectangle, exaggeration, skirtHeight, includeWebMercatorT, negativeAltitudeExponentBias, negativeElevationThreshold, mapProjection) {
         var geographicWest;
         var geographicSouth;
         var geographicEast;
         var geographicNorth;
         var rectangleWidth, rectangleHeight;
 
-        var hasCustomProjection = defined(wellKnownText);
-
-        var proj4Projection;
-        if (hasCustomProjection) {
-            proj4Projection = new Proj4Projection(wellKnownText);
-        }
+        var hasCustomProjection = defined(mapProjection);
 
         if (!defined(rectangle)) {
             geographicWest = CesiumMath.toRadians(nativeRectangle.west);
@@ -134,7 +145,7 @@ define([
         if (hasCustomProjection) {
             var cartographicRTC = ellipsoid.cartesianToCartographic(relativeToCenter, scratchCartographic);
             cartographicRTC.height = 0.0;
-            var projectedRTC = proj4Projection.project(cartographicRTC, projectedCartesian3Scratch);
+            var projectedRTC = mapProjection.project(cartographicRTC, projectedCartesian3Scratch);
             relativeToCenter2D = relativeToCenter2dScratch;
             relativeToCenter2D.x = projectedRTC.x;
             relativeToCenter2D.y = projectedRTC.y;
@@ -316,7 +327,7 @@ define([
                 positions[pointOffset] = pos;
 
                 if (hasCustomProjection) {
-                    var pos2D = proj4Projection.project(scratchCartographic, projectedCartesian3Scratch);
+                    var pos2D = mapProjection.project(scratchCartographic, projectedCartesian3Scratch);
                     positions2D[pointOffset] = new Cartesian2(pos2D.x, pos2D.y);
                 }
 
@@ -390,13 +401,13 @@ define([
 
         var percentage = 0.00001;
         addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-            westBorder, -percentage * rectangleWidth, true, -percentage * rectangleHeight, positions2D, proj4Projection);
+            westBorder, -percentage * rectangleWidth, true, -percentage * rectangleHeight, positions2D, mapProjection);
         addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-            southBorder, -percentage * rectangleHeight, false, 0.0, positions2D, proj4Projection);
+            southBorder, -percentage * rectangleHeight, false, 0.0, positions2D, mapProjection);
         addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-            eastBorder, percentage * rectangleWidth, true, percentage * rectangleHeight, positions2D, proj4Projection);
+            eastBorder, percentage * rectangleWidth, true, percentage * rectangleHeight, positions2D, mapProjection);
         addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-            northBorder, percentage * rectangleHeight, false, 0.0, positions2D, proj4Projection);
+            northBorder, percentage * rectangleHeight, false, 0.0, positions2D, mapProjection);
 
         // Since the corner between the north and west sides is in the west array, generate the last
         //  two triangles between the last north vertex and the first west vertex
@@ -453,8 +464,8 @@ define([
     }
 
     function addSkirt(positions, heights, uvs, webMercatorTs, indices, skirtOptions,
-                      borderPoints, fudgeFactor, eastOrWest, cornerFudge, positions2D, proj4Projection) {
-        var hasCustomProjection = defined(proj4Projection);
+                      borderPoints, fudgeFactor, eastOrWest, cornerFudge, positions2D, mapProjection) {
+        var hasCustomProjection = defined(mapProjection);
 
         var count = borderPoints.length;
         for (var j = 0; j < count; ++j) {
@@ -495,7 +506,7 @@ define([
             }
 
             if (hasCustomProjection) {
-                var pos2D = proj4Projection.project(scratchCartographic, projectedCartesian3Scratch);
+                var pos2D = mapProjection.project(scratchCartographic, projectedCartesian3Scratch);
                 positions2D.push(new Cartesian2(pos2D.x, pos2D.y));
             }
 

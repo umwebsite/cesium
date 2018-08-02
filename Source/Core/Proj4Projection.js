@@ -51,6 +51,21 @@ define([
             get: function() {
                 return this._wkt;
             }
+        },
+        /**
+         * Gets whether or not the projection is cylindrical about the equator.
+         * Not all Proj4 projections are cylindrical about the equator.
+         *
+         * @memberof Proj4Projection.prototype
+         *
+         * @type {Boolean}
+         * @readonly
+         * @private
+         */
+        isEquatorialCylindrical : {
+            get : function() {
+                return false;
+            }
         }
     });
 

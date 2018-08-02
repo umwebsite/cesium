@@ -7,7 +7,6 @@ define([
         './GeographicProjection',
         './HeightmapTessellator',
         './Math',
-        './Proj4Projection',
         './Rectangle',
         './TaskProcessor',
         './TerrainEncoding',
@@ -22,7 +21,6 @@ define([
         GeographicProjection,
         HeightmapTessellator,
         CesiumMath,
-        Proj4Projection,
         Rectangle,
         TaskProcessor,
         TerrainEncoding,
@@ -209,8 +207,12 @@ define([
         var center = ellipsoid.cartographicToCartesian(Rectangle.center(rectangle));
 
         var wkt;
-        if (defined(mapProjection) && mapProjection instanceof Proj4Projection) {
+        var projectionUrl;
+        var projectionFunctionName;
+        if (defined(mapProjection)) {
             wkt = mapProjection.wellKnownText;
+            projectionUrl = mapProjection._url;
+            projectionFunctionName = mapProjection._functionName;
         }
 
         var structure = this._structure;
@@ -232,7 +234,9 @@ define([
             skirtHeight : this._skirtHeight,
             isGeographic : tilingScheme.projection instanceof GeographicProjection,
             exaggeration : exaggeration,
-            wkt : wkt
+            wkt : wkt,
+            projectionUrl : projectionUrl,
+            projectionFunctionName : projectionFunctionName
         });
 
         if (!defined(verticesPromise)) {

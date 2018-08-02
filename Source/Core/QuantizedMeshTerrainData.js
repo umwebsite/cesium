@@ -11,7 +11,6 @@ define([
         './Intersections2D',
         './Math',
         './OrientedBoundingBox',
-        './Proj4Projection',
         './TaskProcessor',
         './TerrainEncoding',
         './TerrainMesh'
@@ -28,7 +27,6 @@ define([
         Intersections2D,
         CesiumMath,
         OrientedBoundingBox,
-        Proj4Projection,
         TaskProcessor,
         TerrainEncoding,
         TerrainMesh) {
@@ -282,8 +280,12 @@ define([
         exaggeration = defaultValue(exaggeration, 1.0);
 
         var wkt;
-        if (defined(mapProjection) && mapProjection instanceof Proj4Projection) {
+        var projectionUrl;
+        var projectionFunctionName;
+        if (defined(mapProjection)) {
             wkt = mapProjection.wellKnownText;
+            projectionUrl = mapProjection._url;
+            projectionFunctionName = mapProjection._functionName;
         }
 
         var verticesPromise = createMeshTaskProcessor.scheduleTask({
@@ -305,7 +307,9 @@ define([
             relativeToCenter : this._boundingSphere.center,
             ellipsoid : ellipsoid,
             exaggeration : exaggeration,
-            wkt : wkt
+            wkt : wkt,
+            projectionUrl : projectionUrl,
+            projectionFunctionName : projectionFunctionName
         });
 
         if (!defined(verticesPromise)) {

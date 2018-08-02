@@ -2,6 +2,7 @@ define([
         './Cartesian3',
         './Cartographic',
         './Check',
+        './CustomProjection',
         './defaultValue',
         './defined',
         './Ellipsoid',
@@ -17,6 +18,7 @@ define([
         Cartesian3,
         Cartographic,
         Check,
+        CustomProjection,
         defaultValue,
         defined,
         Ellipsoid,
@@ -284,97 +286,97 @@ define([
         projection = defaultValue(projection, defaultProjection);
         var center;
 
-        if (projection instanceof Proj4Projection) {
-            center = Rectangle.center(rectangle, centerScratch);
-            var sample = sampleScratch;
+        if (projection.isEquatorialCylindrical) {
+            Rectangle.southwest(rectangle, fromRectangle2DSouthwest);
+            fromRectangle2DSouthwest.height = minimumHeight;
+            Rectangle.northeast(rectangle, fromRectangle2DNortheast);
+            fromRectangle2DNortheast.height = maximumHeight;
 
-            sample = Rectangle.southwest(rectangle, sample);
-            sample.height = maximumHeight;
-            projection.project(sample, projectedPointsScratch[0]);
+            var lowerLeft = projection.project(fromRectangle2DSouthwest, fromRectangle2DLowerLeft);
+            var upperRight = projection.project(fromRectangle2DNortheast, fromRectangle2DUpperRight);
 
-            sample = Rectangle.southeast(rectangle, sample);
-            sample.height = maximumHeight;
-            projection.project(sample, projectedPointsScratch[1]);
+            var width = upperRight.x - lowerLeft.x;
+            var height = upperRight.y - lowerLeft.y;
+            var elevation = upperRight.z - lowerLeft.z;
 
-            sample = Rectangle.northeast(rectangle, sample);
-            sample.height = maximumHeight;
-            projection.project(sample, projectedPointsScratch[2]);
-
-            sample = Rectangle.northwest(rectangle, sample);
-            sample.height = maximumHeight;
-            projection.project(sample, projectedPointsScratch[3]);
-
-            sample.height = maximumHeight;
-            sample.latitude = center.latitude;
-            sample.longitude = rectangle.west;
-            projection.project(sample, projectedPointsScratch[4]);
-
-            sample.latitude = center.latitude;
-            sample.longitude = rectangle.east;
-            projection.project(sample, projectedPointsScratch[5]);
-
-            sample.latitude = rectangle.north;
-            sample.longitude = center.longitude;
-            projection.project(sample, projectedPointsScratch[6]);
-
-            sample.latitude = rectangle.south;
-            sample.longitude = center.longitude;
-            projection.project(sample, projectedPointsScratch[7]);
-
-            sample = Rectangle.southwest(rectangle, sample);
-            sample.height = minimumHeight;
-            projection.project(sample, projectedPointsScratch[8]);
-
-            sample = Rectangle.southeast(rectangle, sample);
-            sample.height = minimumHeight;
-            projection.project(sample, projectedPointsScratch[9]);
-
-            sample = Rectangle.northeast(rectangle, sample);
-            sample.height = minimumHeight;
-            projection.project(sample, projectedPointsScratch[10]);
-
-            sample = Rectangle.northwest(rectangle, sample);
-            sample.height = minimumHeight;
-            projection.project(sample, projectedPointsScratch[11]);
-
-            sample.height = minimumHeight;
-            sample.latitude = center.latitude;
-            sample.longitude = rectangle.west;
-            projection.project(sample, projectedPointsScratch[12]);
-
-            sample.latitude = center.latitude;
-            sample.longitude = rectangle.east;
-            projection.project(sample, projectedPointsScratch[13]);
-
-            sample.latitude = rectangle.north;
-            sample.longitude = center.longitude;
-            projection.project(sample, projectedPointsScratch[14]);
-
-            sample.latitude = rectangle.south;
-            sample.longitude = center.longitude;
-            projection.project(sample, projectedPointsScratch[15]);
-
-            return BoundingSphere.fromPoints(projectedPointsScratch, result);
+            result.radius = Math.sqrt(width * width + height * height + elevation * elevation) * 0.5;
+            center = result.center;
+            center.x = lowerLeft.x + width * 0.5;
+            center.y = lowerLeft.y + height * 0.5;
+            center.z = lowerLeft.z + elevation * 0.5;
+            return result;
         }
 
-        Rectangle.southwest(rectangle, fromRectangle2DSouthwest);
-        fromRectangle2DSouthwest.height = minimumHeight;
-        Rectangle.northeast(rectangle, fromRectangle2DNortheast);
-        fromRectangle2DNortheast.height = maximumHeight;
+        center = Rectangle.center(rectangle, centerScratch);
+        var sample = sampleScratch;
 
-        var lowerLeft = projection.project(fromRectangle2DSouthwest, fromRectangle2DLowerLeft);
-        var upperRight = projection.project(fromRectangle2DNortheast, fromRectangle2DUpperRight);
+        sample = Rectangle.southwest(rectangle, sample);
+        sample.height = maximumHeight;
+        projection.project(sample, projectedPointsScratch[0]);
 
-        var width = upperRight.x - lowerLeft.x;
-        var height = upperRight.y - lowerLeft.y;
-        var elevation = upperRight.z - lowerLeft.z;
+        sample = Rectangle.southeast(rectangle, sample);
+        sample.height = maximumHeight;
+        projection.project(sample, projectedPointsScratch[1]);
 
-        result.radius = Math.sqrt(width * width + height * height + elevation * elevation) * 0.5;
-        center = result.center;
-        center.x = lowerLeft.x + width * 0.5;
-        center.y = lowerLeft.y + height * 0.5;
-        center.z = lowerLeft.z + elevation * 0.5;
-        return result;
+        sample = Rectangle.northeast(rectangle, sample);
+        sample.height = maximumHeight;
+        projection.project(sample, projectedPointsScratch[2]);
+
+        sample = Rectangle.northwest(rectangle, sample);
+        sample.height = maximumHeight;
+        projection.project(sample, projectedPointsScratch[3]);
+
+        sample.height = maximumHeight;
+        sample.latitude = center.latitude;
+        sample.longitude = rectangle.west;
+        projection.project(sample, projectedPointsScratch[4]);
+
+        sample.latitude = center.latitude;
+        sample.longitude = rectangle.east;
+        projection.project(sample, projectedPointsScratch[5]);
+
+        sample.latitude = rectangle.north;
+        sample.longitude = center.longitude;
+        projection.project(sample, projectedPointsScratch[6]);
+
+        sample.latitude = rectangle.south;
+        sample.longitude = center.longitude;
+        projection.project(sample, projectedPointsScratch[7]);
+
+        sample = Rectangle.southwest(rectangle, sample);
+        sample.height = minimumHeight;
+        projection.project(sample, projectedPointsScratch[8]);
+
+        sample = Rectangle.southeast(rectangle, sample);
+        sample.height = minimumHeight;
+        projection.project(sample, projectedPointsScratch[9]);
+
+        sample = Rectangle.northeast(rectangle, sample);
+        sample.height = minimumHeight;
+        projection.project(sample, projectedPointsScratch[10]);
+
+        sample = Rectangle.northwest(rectangle, sample);
+        sample.height = minimumHeight;
+        projection.project(sample, projectedPointsScratch[11]);
+
+        sample.height = minimumHeight;
+        sample.latitude = center.latitude;
+        sample.longitude = rectangle.west;
+        projection.project(sample, projectedPointsScratch[12]);
+
+        sample.latitude = center.latitude;
+        sample.longitude = rectangle.east;
+        projection.project(sample, projectedPointsScratch[13]);
+
+        sample.latitude = rectangle.north;
+        sample.longitude = center.longitude;
+        projection.project(sample, projectedPointsScratch[14]);
+
+        sample.latitude = rectangle.south;
+        sample.longitude = center.longitude;
+        projection.project(sample, projectedPointsScratch[15]);
+
+        return BoundingSphere.fromPoints(projectedPointsScratch, result);
     };
 
     var fromRectangle3DScratch = [];

@@ -171,8 +171,12 @@ define([
         var center = ellipsoid.cartographicToCartesian(Rectangle.center(rectangleScratch));
 
         var wkt;
-        if (defined(mapProjection) && mapProjection instanceof Proj4Projection) {
+        var projectionUrl;
+        var projectionFunctionName;
+        if (defined(mapProjection)) {
             wkt = mapProjection.wellKnownText;
+            projectionUrl = mapProjection._url;
+            projectionFunctionName = mapProjection._functionName;
         }
 
         var levelZeroMaxError = 40075.16; // From Google's Doc
@@ -190,7 +194,9 @@ define([
             includeWebMercatorT : true,
             negativeAltitudeExponentBias: this._negativeAltitudeExponentBias,
             negativeElevationThreshold: this._negativeElevationThreshold,
-            wkt : wkt
+            wkt : wkt,
+            projectionUrl : projectionUrl,
+            projectionFunctionName : projectionFunctionName
         });
 
         if (!defined(verticesPromise)) {

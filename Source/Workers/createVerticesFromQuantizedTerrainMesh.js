@@ -1,10 +1,12 @@
 define([
+        '../ThirdParty/when',
         '../Core/AttributeCompression',
         '../Core/AxisAlignedBoundingBox',
         '../Core/BoundingSphere',
         '../Core/Cartesian2',
         '../Core/Cartesian3',
         '../Core/Cartographic',
+        '../Core/CustomProjection',
         '../Core/defined',
         '../Core/Ellipsoid',
         '../Core/IndexDatatype',
@@ -17,12 +19,14 @@ define([
         '../Core/WebMercatorProjection',
         './createTaskProcessorWorker'
     ], function(
+        when,
         AttributeCompression,
         AxisAlignedBoundingBox,
         BoundingSphere,
         Cartesian2,
         Cartesian3,
         Cartographic,
+        CustomProjection,
         defined,
         Ellipsoid,
         IndexDatatype,
@@ -38,6 +42,22 @@ define([
 
     var maxShort = 32767;
 
+    function createVerticesFromQuantizedTerrainMesh(parameters, transferableObjects) {
+        var mapProjection;
+        var projectionPromise = when.resolve();
+        if (defined(parameters.wkt)) {
+            mapProjection = new Proj4Projection(parameters.wkt);
+        }
+        if (defined(parameters.projectionUrl) && defined(parameters.projectionFunctionName)) {
+            mapProjection = new CustomProjection(parameters.projectionUrl, parameters.projectionFunctionName);
+            projectionPromise = mapProjection.readyPromise;
+        }
+
+        return projectionPromise.then(function() {
+            return implementation(parameters, transferableObjects, mapProjection);
+        });
+    }
+
     var cartesian3Scratch = new Cartesian3();
     var scratchMinimum = new Cartesian3();
     var scratchMaximum = new Cartesian3();
@@ -49,8 +69,7 @@ define([
     var projectedCartesian3Scratch = new Cartesian3();
     var projectedCartographicScratch = new Cartographic();
     var relativeToCenter2dScratch = new Cartesian2();
-
-    function createVerticesFromQuantizedTerrainMesh(parameters, transferableObjects) {
+    function implementation(parameters, transferableObjects, mapProjection) {
         var quantizedVertices = parameters.quantizedVertices;
         var quantizedVertexCount = quantizedVertices.length / 3;
         var octEncodedNormals = parameters.octEncodedNormals;
@@ -74,12 +93,7 @@ define([
         var fromENU = Transforms.eastNorthUpToFixedFrame(center, ellipsoid);
         var toENU = Matrix4.inverseTransformation(fromENU, new Matrix4());
 
-        var hasCustomProjection = defined(parameters.wkt);
-
-        var proj4Projection;
-        if (hasCustomProjection) {
-            proj4Projection = new Proj4Projection(parameters.wkt);
-        }
+        var hasCustomProjection = defined(mapProjection);
 
         var southMercatorY;
         var oneOverMercatorHeight;
@@ -106,7 +120,7 @@ define([
         if (hasCustomProjection) {
             var cartographicRTC = ellipsoid.cartesianToCartographic(center, projectedCartographicScratch);
             cartographicRTC.height = 0.0;
-            var projectedRTC = proj4Projection.project(cartographicRTC, projectedCartesian3Scratch);
+            var projectedRTC = mapProjection.project(cartographicRTC, projectedCartesian3Scratch);
             relativeToCenter2D = relativeToCenter2dScratch;
             relativeToCenter2D.x = projectedRTC.x;
             relativeToCenter2D.y = projectedRTC.y;
@@ -151,7 +165,7 @@ define([
                 heightlessCartographic.longitude = cartographicScratch.longitude;
                 heightlessCartographic.latitude = cartographicScratch.latitude;
                 heightlessCartographic.height = 0.0;
-                var projectedPosition = proj4Projection.project(heightlessCartographic, projectedCartesian3Scratch);
+                var projectedPosition = mapProjection.project(heightlessCartographic, projectedCartesian3Scratch);
                 positions2D[i] = new Cartesian2(projectedPosition.x, projectedPosition.y);
             }
 
@@ -236,13 +250,13 @@ define([
         // Add skirts.
         var vertexBufferIndex = quantizedVertexCount * vertexStride;
         var indexBufferIndex = parameters.indices.length;
-        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.westIndices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, parameters.westSkirtHeight, true, exaggeration, southMercatorY, oneOverMercatorHeight, westLongitudeOffset, westLatitudeOffset, proj4Projection);
+        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.westIndices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, parameters.westSkirtHeight, true, exaggeration, southMercatorY, oneOverMercatorHeight, westLongitudeOffset, westLatitudeOffset, mapProjection);
         vertexBufferIndex += parameters.westIndices.length * vertexStride;
-        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.southIndices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, parameters.southSkirtHeight, false, exaggeration, southMercatorY, oneOverMercatorHeight, southLongitudeOffset, southLatitudeOffset, proj4Projection);
+        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.southIndices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, parameters.southSkirtHeight, false, exaggeration, southMercatorY, oneOverMercatorHeight, southLongitudeOffset, southLatitudeOffset, mapProjection);
         vertexBufferIndex += parameters.southIndices.length * vertexStride;
-        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.eastIndices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, parameters.eastSkirtHeight, false, exaggeration, southMercatorY, oneOverMercatorHeight, eastLongitudeOffset, eastLatitudeOffset, proj4Projection);
+        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.eastIndices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, parameters.eastSkirtHeight, false, exaggeration, southMercatorY, oneOverMercatorHeight, eastLongitudeOffset, eastLatitudeOffset, mapProjection);
         vertexBufferIndex += parameters.eastIndices.length * vertexStride;
-        addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.northIndices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, parameters.northSkirtHeight, true, exaggeration, southMercatorY, oneOverMercatorHeight, northLongitudeOffset, northLatitudeOffset, proj4Projection);
+        addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.northIndices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, parameters.northSkirtHeight, true, exaggeration, southMercatorY, oneOverMercatorHeight, northLongitudeOffset, northLatitudeOffset, mapProjection);
 
         transferableObjects.push(vertexBuffer.buffer, indexBuffer.buffer);
 
@@ -294,7 +308,7 @@ define([
     }
 
     var skirtCartesian2Scratch = new Cartesian2();
-    function addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, edgeVertices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, skirtLength, isWestOrNorthEdge, exaggeration, southMercatorY, oneOverMercatorHeight, longitudeOffset, latitudeOffset, proj4Projection) {
+    function addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, edgeVertices, encoding, heights, uvs, octEncodedNormals, ellipsoid, rectangle, skirtLength, isWestOrNorthEdge, exaggeration, southMercatorY, oneOverMercatorHeight, longitudeOffset, latitudeOffset, mapProjection) {
         var start, end, increment;
         if (isWestOrNorthEdge) {
             start = edgeVertices.length - 1;
@@ -321,7 +335,7 @@ define([
             east += CesiumMath.TWO_PI;
         }
 
-        var hasCustomProjection = defined(proj4Projection);
+        var hasCustomProjection = defined(mapProjection);
 
         for (var i = start; i !== end; i += increment) {
             var index = edgeVertices[i];
@@ -341,7 +355,7 @@ define([
                 heightlessCartographic.longitude = cartographicScratch.longitude;
                 heightlessCartographic.latitude = cartographicScratch.latitude;
                 heightlessCartographic.height = 0.0;
-                var projectedPosition = proj4Projection.project(heightlessCartographic, projectedCartesian3Scratch);
+                var projectedPosition = mapProjection.project(heightlessCartographic, projectedCartesian3Scratch);
                 position2D.x = projectedPosition.x;
                 position2D.y = projectedPosition.y;
             }

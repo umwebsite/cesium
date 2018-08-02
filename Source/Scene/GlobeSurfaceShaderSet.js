@@ -2,7 +2,6 @@ define([
         '../Core/defined',
         '../Core/destroyObject',
         '../Core/TerrainQuantization',
-        '../Core/Proj4Projection',
         '../Renderer/ShaderProgram',
         './getClippingFunction',
         './SceneMode'
@@ -10,7 +9,6 @@ define([
         defined,
         destroyObject,
         TerrainQuantization,
-        Proj4Projection,
         ShaderProgram,
         getClippingFunction,
         SceneMode) {
@@ -88,7 +86,7 @@ define([
 
         var positions2d = 0;
         var positions2dDefine = '';
-        if (frameState.mapProjection instanceof Proj4Projection) {
+        if (!frameState.mapProjection.isEquatorialCylindrical) {
             positions2d = 1;
             positions2dDefine = 'POSITIONS_2D';
         }
