@@ -172,6 +172,13 @@ define([
          * @private
          */
         this._clippingPlanes = undefined;
+
+        /**
+         * A property specifying a {@link Rectangle} used to selectively prevent tiles outside a region from loading.
+         * For limiting terrain in scenes that use custom projections or Proj4JS projections that cause overlapping tiles.
+         * @type {Rectangle}
+         */
+        this.tileLimitRectangle = Rectangle.clone(Rectangle.MAX_VALUE);
     }
 
     defineProperties(GlobeSurfaceTileProvider.prototype, {
@@ -513,6 +520,7 @@ define([
     };
 
     var boundingSphereScratch = new BoundingSphere();
+    var rectangleIntersectionScratch = new Rectangle();
 
     /**
      * Determines the visibility of a given tile.  The tile may be fully visible, partially visible, or not
@@ -541,6 +549,17 @@ define([
         var boundingVolume = defaultValue(surfaceTile.orientedBoundingBox, surfaceTile.boundingSphere3D);
 
         if (frameState.mode !== SceneMode.SCENE3D) {
+
+            // Check if the tile is outside the limit area in 2D
+            surfaceTile.clippedByBoundaries = false;
+            var areaLimitIntersection = Rectangle.simpleIntersection(this.tileLimitRectangle, tile.rectangle, rectangleIntersectionScratch);
+            if (!defined(areaLimitIntersection)) {
+                return Visibility.NONE;
+            }
+            if (!Rectangle.equals(areaLimitIntersection, tile.rectangle)) {
+                surfaceTile.clippedByBoundaries = true;
+            }
+
             boundingVolume = boundingSphereScratch;
             BoundingSphere.fromRectangleWithHeights2D(tile.rectangle, frameState.mapProjection, surfaceTile.minimumHeight, surfaceTile.maximumHeight, boundingVolume);
             Cartesian3.fromElements(boundingVolume.center.z, boundingVolume.center.x, boundingVolume.center.y, boundingVolume.center);
@@ -584,6 +603,7 @@ define([
     var modifiedModelViewScratch = new Matrix4();
     var modifiedModelViewProjectionScratch = new Matrix4();
     var tileRectangleScratch = new Cartesian4();
+    var localizedTileLimitRectangleScratch = new Cartesian4();
     var rtcScratch = new Cartesian3();
     var centerEyeScratch = new Cartesian3();
     var southwestScratch = new Cartesian3();
@@ -928,6 +948,9 @@ define([
                 }
                 return frameState.context.defaultTexture;
             },
+            u_tileLimitRectangle : function() {
+                return this.properties.localizedTileLimitRectangle;
+            },
             u_clippingPlanesMatrix : function() {
                 var clippingPlanes = globeSurfaceTileProvider._clippingPlanes;
                 return defined(clippingPlanes) ? Matrix4.multiply(frameState.context.uniformState.view, clippingPlanes.modelMatrix, scratchClippingPlaneMatrix) : Matrix4.IDENTITY;
@@ -977,7 +1000,9 @@ define([
                 minMaxHeight : new Cartesian2(),
                 scaleAndBias : new Matrix4(),
                 clippingPlanesEdgeColor : Color.clone(Color.WHITE),
-                clippingPlanesEdgeWidth : 0.0
+                clippingPlanesEdgeWidth : 0.0,
+
+                localizedTileLimitRectangle : new Cartesian4()
             }
         };
 
@@ -1137,6 +1162,8 @@ define([
 
         // Not used in 3D.
         var tileRectangle = tileRectangleScratch;
+        var localizedTileLimitRectangle = localizedTileLimitRectangleScratch;
+        var tileLimitRectangle = tileProvider.tileLimitRectangle;
 
         // Only used for Mercator projections.
         var southLatitude = 0.0;
@@ -1174,6 +1201,15 @@ define([
                 tileRectangle.y -= rtc.z;
                 tileRectangle.z -= rtc.y;
                 tileRectangle.w -= rtc.z;
+
+                // Convert tile limiter rectangle from cartographic to texture space using the tileRectangle.
+                var cartographicTileRectangle = tile.rectangle;
+                var inverseTileWidth = 1.0 / cartographicTileRectangle.width;
+                var inverseTileHeight = 1.0 / cartographicTileRectangle.height;
+                localizedTileLimitRectangle.x = (tileLimitRectangle.west - cartographicTileRectangle.west) * inverseTileWidth;
+                localizedTileLimitRectangle.y = (tileLimitRectangle.south - cartographicTileRectangle.south) * inverseTileHeight;
+                localizedTileLimitRectangle.z = (tileLimitRectangle.east - cartographicTileRectangle.west) * inverseTileWidth;
+                localizedTileLimitRectangle.w = (tileLimitRectangle.north - cartographicTileRectangle.south) * inverseTileHeight;
             }
 
             if (frameState.mode === SceneMode.SCENE2D && encoding.quantization === TerrainQuantization.BITS12) {
@@ -1271,6 +1307,8 @@ define([
             uniformMapProperties.southAndNorthLatitude.y = northLatitude;
             uniformMapProperties.southMercatorYAndOneOverHeight.x = southMercatorY;
             uniformMapProperties.southMercatorYAndOneOverHeight.y = oneOverMercatorHeight;
+
+            Cartesian4.clone(localizedTileLimitRectangle, uniformMapProperties.localizedTileLimitRectangle);
 
             // For performance, use fog in the shader only when the tile is in fog.
             var applyFog = enableFog && CesiumMath.fog(tile._distance, frameState.fog.density) > CesiumMath.EPSILON3;
@@ -1374,7 +1412,7 @@ define([
                 uniformMap = combine(uniformMap, tileProvider.uniformMap);
             }
 
-            command.shaderProgram = tileProvider._surfaceShaderSet.getShaderProgram(frameState, surfaceTile, numberOfDayTextures, applyBrightness, applyContrast, applyHue, applySaturation, applyGamma, applyAlpha, applySplit, showReflectiveOcean, showOceanWaves, tileProvider.enableLighting, hasVertexNormals, useWebMercatorProjection, applyFog, clippingPlanesEnabled, clippingPlanes);
+            command.shaderProgram = tileProvider._surfaceShaderSet.getShaderProgram(frameState, surfaceTile, numberOfDayTextures, applyBrightness, applyContrast, applyHue, applySaturation, applyGamma, applyAlpha, applySplit, showReflectiveOcean, showOceanWaves, tileProvider.enableLighting, hasVertexNormals, useWebMercatorProjection, applyFog, clippingPlanesEnabled, clippingPlanes, surfaceTile.clippedByBoundaries);
             command.castShadows = castShadows;
             command.receiveShadows = receiveShadows;
             command.renderState = renderState;

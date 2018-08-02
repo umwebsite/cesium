@@ -84,6 +84,8 @@ define([
         this.surfaceShader = undefined;
         this.isClipped = true;
 
+        this.clippedByBoundaries = false;
+
         /**
          * Only for use with custom projections.
          */

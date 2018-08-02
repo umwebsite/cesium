@@ -66,7 +66,7 @@ define([
         return useWebMercatorProjection ? get2DYPositionFractionMercatorProjection : get2DYPositionFractionGeographicProjection;
     }
 
-    GlobeSurfaceShaderSet.prototype.getShaderProgram = function(frameState, surfaceTile, numberOfDayTextures, applyBrightness, applyContrast, applyHue, applySaturation, applyGamma, applyAlpha, applySplit, showReflectiveOcean, showOceanWaves, enableLighting, hasVertexNormals, useWebMercatorProjection, enableFog, enableClippingPlanes, clippingPlanes) {
+    GlobeSurfaceShaderSet.prototype.getShaderProgram = function(frameState, surfaceTile, numberOfDayTextures, applyBrightness, applyContrast, applyHue, applySaturation, applyGamma, applyAlpha, applySplit, showReflectiveOcean, showOceanWaves, enableLighting, hasVertexNormals, useWebMercatorProjection, enableFog, enableClippingPlanes, clippingPlanes, clippedByBoundaries) {
         var quantization = 0;
         var quantizationDefine = '';
 
@@ -91,6 +91,13 @@ define([
             positions2dDefine = 'POSITIONS_2D';
         }
 
+        var tileLimitRectangleFlag = 0;
+        var tileLimitRectangleDefine = '';
+        if (clippedByBoundaries && frameState.mode !== SceneMode.SCENE3D) {
+            tileLimitRectangleFlag = 1;
+            tileLimitRectangleDefine = 'TILE_LIMIT_RECTANGLE';
+        }
+
         var sceneMode = frameState.mode;
         var flags = sceneMode |
                     (applyBrightness << 2) |
@@ -109,7 +116,8 @@ define([
                     (applySplit << 15) |
                     (enableClippingPlanes << 16) |
                     (vertexLogDepth << 17) |
-                    (positions2d << 18);
+                    (positions2d << 18) |
+                    (tileLimitRectangleFlag << 19);
 
         var currentClippingShaderState = 0;
         if (defined(clippingPlanes)) {
@@ -142,7 +150,7 @@ define([
             }
 
             vs.defines.push(quantizationDefine, vertexLogDepthDefine, positions2dDefine);
-            fs.defines.push('TEXTURE_UNITS ' + numberOfDayTextures);
+            fs.defines.push('TEXTURE_UNITS ' + numberOfDayTextures, tileLimitRectangleDefine);
 
             if (applyBrightness) {
                 fs.defines.push('APPLY_BRIGHTNESS');

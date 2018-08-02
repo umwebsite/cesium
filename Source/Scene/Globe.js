@@ -277,6 +277,14 @@ define([
                 this._surface.tileProvider.clippingPlanes = value;
             }
         },
+        tileLimitRectangle : {
+            get : function() {
+                return this._surface.tileProvider.tileLimitRectangle;
+            },
+            set : function(value) {
+                this._surface.tileProvider.tileLimitRectangle = value;
+            }
+        },
         /**
          * The normal map to use for rendering waves in the ocean.  Setting this property will
          * only have an effect if the configured terrain provider includes a water mask.
