@@ -270,7 +270,7 @@ define([
 
     TerrainEncoding.prototype.getOctEncodedNormal = function(buffer, index, result) {
         var stride = this.getStride();
-        index = (index + 1) * stride - 1;
+        index = (index + 1) * stride - (this.has2dPositions ? 3 : 1);
 
         var temp = buffer[index] / 256.0;
         var x = Math.floor(temp);
