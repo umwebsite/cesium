@@ -277,6 +277,12 @@ define([
                 this._surface.tileProvider.clippingPlanes = value;
             }
         },
+        /**
+         * A property that limits the area over which terrain is rendered.
+         *
+         * @memberof Globe.prototype
+         * @type {Rectangle}
+         */
         tileLimitRectangle : {
             get : function() {
                 return this._surface.tileProvider.tileLimitRectangle;
